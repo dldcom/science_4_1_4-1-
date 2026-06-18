@@ -4,58 +4,49 @@ const specimens = [
   {
     id: "hyphae",
     name: "버섯 균사",
-    kind: "균류",
-    magnification: "40배",
-    target: "균사 찾기",
-    prompt: "버섯 균사는 어떤 모양인가요?",
     idealFocus: 72,
     idealLight: 66,
     color: "#d9c8a6",
-    hint: "가늘고 긴 실 같은 선이 보이면 초점이 거의 맞은 상태예요.",
   },
   {
     id: "mold",
     name: "곰팡이",
-    kind: "균류",
-    magnification: "40배",
-    target: "포자 주머니 찾기",
-    prompt: "곰팡이에서 균사와 포자 주머니를 찾아 써 보세요.",
     idealFocus: 68,
     idealLight: 58,
     color: "#b6c8a2",
-    hint: "실 같은 균사 끝에 둥근 주머니가 보이는지 살펴보세요.",
   },
   {
     id: "spirogyra",
     name: "해캄",
-    kind: "원생생물",
-    magnification: "250배",
-    target: "긴 초록 실 관찰",
-    prompt: "해캄은 어떤 모양으로 보이나요?",
     idealFocus: 76,
     idealLight: 62,
     color: "#67a94e",
-    hint: "초록색 긴 실이 물속에서 아주 천천히 흔들려요.",
   },
   {
     id: "paramecium",
     name: "짚신벌레",
-    kind: "원생생물",
-    magnification: "110배",
-    target: "움직임 관찰",
-    prompt: "짚신벌레의 모양과 움직임을 관찰해 써 보세요.",
     idealFocus: 74,
     idealLight: 70,
     color: "#d8d1a5",
-    hint: "길쭉한 둥근 몸이 천천히 방향을 바꾸며 움직입니다.",
   },
 ];
 
 const zoomLevels = [
-  { label: "1X", scale: 0.82, ring: 0 },
-  { label: "2X", scale: 1.08, ring: Math.PI * 0.6 },
-  { label: "4X", scale: 1.42, ring: Math.PI * 1.2 },
+  { label: "40x", scale: 0.62, ring: 0 },
+  { label: "100x", scale: 1.08, ring: Math.PI * 0.6 },
+  { label: "400x", scale: 2.35, ring: Math.PI * 1.2 },
 ];
+
+const hyphaePhotoSources = [
+  "./assets/specimens/hyphae-40x.png",
+  "./assets/specimens/hyphae-100x.png",
+  "./assets/specimens/hyphae-400x.png",
+];
+const hyphaePhotos = hyphaePhotoSources.map((src) => {
+  const image = new Image();
+  image.src = src;
+  return image;
+});
 
 const OPTICAL_AXIS_X = -0.38;
 
@@ -81,10 +72,6 @@ const zoomControl = document.querySelector("#zoomControl");
 const lightValue = document.querySelector("#lightValue");
 const focusValue = document.querySelector("#focusValue");
 const zoomValue = document.querySelector("#zoomValue");
-const magnification = document.querySelector("#magnification");
-const targetFeature = document.querySelector("#targetFeature");
-const hint = document.querySelector("#hint");
-const activePart = document.querySelector("#activePart");
 const scopeCanvas = document.createElement("canvas");
 scopeCanvas.width = 520;
 scopeCanvas.height = 520;
@@ -106,6 +93,9 @@ let focusKnobRight;
 let lightKnob;
 let revolvingRing;
 let objectiveHousing;
+let zoomMarker;
+let focusMarker;
+let lightMarker;
 let lamp;
 let specimenPlate;
 let slideGlass;
@@ -119,6 +109,10 @@ const defaultOrbitPitch = Math.asin(defaultCameraOffset.y / defaultCameraDistanc
 let cameraLookAt = defaultCameraLookAt.clone();
 const scenePointers = new Map();
 let lastPinchDistance = 0;
+const activeControl = {
+  part: "",
+  until: 0,
+};
 
 function initSpecimenButtons() {
   specimenGrid.innerHTML = "";
@@ -128,7 +122,7 @@ function initSpecimenButtons() {
     button.type = "button";
     button.setAttribute("aria-pressed", specimen.id === state.specimen.id ? "true" : "false");
     button.dataset.specimen = specimen.id;
-    button.innerHTML = `<strong>${specimen.name}</strong><span>${specimen.kind} · ${specimen.magnification}</span>`;
+    button.innerHTML = `<strong>${specimen.name}</strong>`;
     button.addEventListener("click", () => selectSpecimen(specimen.id));
     specimenGrid.append(button);
   });
@@ -141,7 +135,6 @@ function selectSpecimen(id) {
   document.querySelectorAll(".specimen-button").forEach((button) => {
     button.setAttribute("aria-pressed", button.dataset.specimen === id ? "true" : "false");
   });
-  activePart.textContent = `${state.specimen.name} 표본을 재물대에 올렸습니다`;
   updateUi();
 }
 
@@ -149,22 +142,14 @@ function updateUi() {
   lightValue.value = state.light;
   focusValue.value = state.focus;
   zoomValue.value = zoomLevels[state.zoom].label;
-  magnification.textContent = state.specimen.magnification;
-  targetFeature.textContent = state.specimen.target;
   overlaySpecimen.textContent = state.specimen.name;
-  hint.textContent = state.specimen.hint;
 
   const focusDelta = Math.abs(state.focus - state.specimen.idealFocus);
   const lightDelta = Math.abs(state.light - state.specimen.idealLight);
-  const lightReady = lightDelta < 18;
-  const focusReady = focusDelta < 9;
-
-  updateSteps(lightReady, focusReady);
 
   if (focusDelta < 9 && lightDelta < 18) {
     overlayState.textContent = "관찰 성공";
     state.completed.add(state.specimen.id);
-    activePart.textContent = `${state.specimen.target} 성공! 접안렌즈 가까이에서 확대 화면을 볼 수 있습니다.`;
   } else if (focusDelta < 18) {
     overlayState.textContent = "초점 거의 맞음";
   } else {
@@ -186,19 +171,19 @@ function updateUi() {
 
 lightControl.addEventListener("input", (event) => {
   state.light = Number(event.target.value);
-  activePart.textContent = "조명 조절 나사를 돌려 받침대 조명을 바꾸는 중입니다";
+  pulseControl("light");
   updateUi();
 });
 
 focusControl.addEventListener("input", (event) => {
   state.focus = Number(event.target.value);
-  activePart.textContent = "초점 조절 나사를 돌려 대물렌즈 높이를 맞추는 중입니다";
+  pulseControl("focus");
   updateUi();
 });
 
 zoomControl.addEventListener("input", (event) => {
   state.zoom = Number(event.target.value);
-  activePart.textContent = "회전판을 돌려 대물렌즈 배율을 바꾸는 중입니다";
+  pulseControl("zoom");
   updateUi();
 });
 
@@ -216,29 +201,12 @@ observationOverlay.addEventListener("click", (event) => {
   }
 });
 
-function updateSteps(lightReady, focusReady) {
-  const steps = {
-    specimen: true,
-    light: lightReady,
-    focus: focusReady,
-  };
-  document.querySelectorAll(".step-list li").forEach((item) => {
-    const done = steps[item.dataset.step];
-    item.classList.toggle("is-done", done);
-    item.classList.toggle("is-active", !done && firstPendingStep(steps) === item.dataset.step);
-  });
-}
-
-function firstPendingStep(steps) {
-  return ["specimen", "light", "focus"].find((key) => !steps[key]);
-}
-
 function refreshButtons() {
   document.querySelectorAll(".specimen-button").forEach((button) => {
     const specimen = specimens.find((item) => item.id === button.dataset.specimen);
     const done = state.completed.has(button.dataset.specimen);
     button.classList.toggle("is-complete", done);
-    button.innerHTML = `<strong>${specimen.name}${done ? " ✓" : ""}</strong><span>${specimen.kind} · ${specimen.magnification}</span>`;
+    button.innerHTML = `<strong>${specimen.name}${done ? " ✓" : ""}</strong>`;
   });
 }
 
@@ -359,6 +327,7 @@ function createScene() {
     const zoom = zoomLevels[state.zoom];
     revolvingRing.rotation.y += (zoom.ring - revolvingRing.rotation.y) * 0.14;
     objectiveHousing.rotation.y += (zoom.ring * 0.55 - objectiveHousing.rotation.y) * 0.14;
+    updateControlMarkers(performance.now());
     specimenPlate.position.x = OPTICAL_AXIS_X;
     camera.lookAt(cameraLookAt);
     updateEyepiecePrompt(camera, host);
@@ -457,6 +426,38 @@ function mesh(geometry, mat, position, rotation = [0, 0, 0], cast = true) {
   item.castShadow = cast;
   item.receiveShadow = true;
   return item;
+}
+
+function pulseControl(part) {
+  activeControl.part = part;
+  activeControl.until = performance.now() + 850;
+}
+
+function createControlMarker(size = 0.06) {
+  const group = new THREE.Group();
+  const dotMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd72f2f,
+    emissive: 0x8b1010,
+    emissiveIntensity: 0.35,
+    roughness: 0.28,
+  });
+  group.add(new THREE.Mesh(new THREE.SphereGeometry(size, 24, 16), dotMaterial));
+  group.userData.baseScale = 1;
+  group.userData.dotMaterial = dotMaterial;
+  return group;
+}
+
+function updateControlMarkers(now) {
+  updateMarker(zoomMarker, activeControl.part === "zoom" && now < activeControl.until);
+  updateMarker(focusMarker, activeControl.part === "focus" && now < activeControl.until);
+  updateMarker(lightMarker, activeControl.part === "light" && now < activeControl.until);
+}
+
+function updateMarker(marker, active) {
+  if (!marker) return;
+  const targetScale = active ? 1.28 : 1;
+  marker.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.18);
+  marker.userData.dotMaterial.emissiveIntensity += ((active ? 0.75 : 0.35) - marker.userData.dotMaterial.emissiveIntensity) * 0.18;
 }
 
 function makeEyepieceGlowTexture() {
@@ -562,7 +563,7 @@ function buildMicroscope(root) {
 
   const head = new THREE.Group();
   head.position.set(0.18, 2.76, -0.08);
-  head.rotation.set(0.05, 0.08, -0.06);
+  head.rotation.set(0.02, 0.04, -0.02);
   focusCarrier.add(head);
 
   head.add(mesh(new THREE.BoxGeometry(1.08, 0.72, 0.8), pale, [0, 0, 0.08]));
@@ -574,6 +575,12 @@ function buildMicroscope(root) {
   head.add(mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.035, 48), black, [0.4, 1.0, -0.69], [-0.52, 0.04, 0.08]));
   head.add(mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.045, 64), eyepieceGlass, [-0.44, 1.015, -0.7], [-0.52, 0.04, -0.08], false));
   head.add(mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.045, 64), eyepieceGlass, [0.4, 1.015, -0.7], [-0.52, 0.04, 0.08], false));
+
+  const headBridge = new THREE.Group();
+  headBridge.add(mesh(new THREE.BoxGeometry(0.74, 0.44, 0.56), pale, [0.58, 2.76, 0.02]));
+  headBridge.add(mesh(new THREE.BoxGeometry(0.34, 0.82, 0.42), enamel, [0.95, 2.52, -0.08]));
+  headBridge.add(mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.24, 48), black, [0, 2.34, 0.08]));
+  focusCarrier.add(headBridge);
 
   const nosepiece = new THREE.Group();
   nosepiece.position.set(0, 2.15, 0.08);
@@ -590,9 +597,14 @@ function buildMicroscope(root) {
     );
     revolvingRing.add(grip);
   }
-  const ringLabel = makeLabelSprite("회전판", 0.54, 0.15);
-  ringLabel.position.set(-0.62, 0.08, 0.54);
-  ringLabel.rotation.y = 0.2;
+  zoomMarker = createControlMarker(0.04);
+  zoomMarker.position.set(0.43, 0.16, 0.06);
+  zoomMarker.rotation.x = Math.PI / 2;
+  revolvingRing.add(zoomMarker);
+
+  const ringLabel = makeLabelSprite("회전판", 0.82, 0.22);
+  ringLabel.position.set(-0.58, -0.14, 0.52);
+  ringLabel.rotation.y = 0.18;
   nosepiece.add(ringLabel);
 
   objectiveHousing = new THREE.Group();
@@ -603,9 +615,10 @@ function buildMicroscope(root) {
   objectiveHousing.add(mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.035, 40), glass, [0, -0.69, 0], [0, 0, 0], false));
   objectiveLens = objectiveHousing;
 
-  const objectiveLabel = makeLabelSprite("2X", 0.34, 0.15);
-  objectiveLabel.position.set(0, -0.39, 0.215);
-  objectiveHousing.add(objectiveLabel);
+  const objectiveLabel = makeLabelSprite("대물렌즈", 0.78, 0.2);
+  objectiveLabel.position.set(-0.58, -0.48, 0.32);
+  objectiveLabel.rotation.y = 0.2;
+  nosepiece.add(objectiveLabel);
 
   focusKnobLeft = createKnob(rubber);
   focusKnobLeft.position.set(0.34, 2.02, -0.72);
@@ -615,6 +628,10 @@ function buildMicroscope(root) {
   focusKnobRight = createKnob(rubber);
   focusKnobRight.position.set(1.12, 2.02, -0.72);
   focusKnobRight.rotation.y = Math.PI / 2;
+  focusMarker = createControlMarker(0.045);
+  focusMarker.position.set(0.34, 0.24, 0.16);
+  focusMarker.rotation.x = Math.PI / 2;
+  focusKnobRight.add(focusMarker);
   root.add(focusKnobRight);
   root.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.96, 32), metal, [0.72, 2.02, -0.72], [0, 0, Math.PI / 2]));
   root.add(mesh(new THREE.BoxGeometry(0.4, 0.62, 0.4), pale, [0.72, 2.0, -0.54]));
@@ -624,28 +641,33 @@ function buildMicroscope(root) {
   lightKnob = createSmallKnob(rubber);
   lightKnob.position.set(1.28, 0.56, 1.08);
   lightKnob.rotation.y = Math.PI / 2;
+  lightMarker = createControlMarker(0.034);
+  lightMarker.position.set(0.19, 0.13, 0.09);
+  lightMarker.rotation.x = Math.PI / 2;
+  lightKnob.add(lightMarker);
   root.add(lightKnob);
   root.add(mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.28, 24), metal, [1.14, 0.56, 1.08], [Math.PI / 2, 0, 0]));
   root.add(mesh(new THREE.BoxGeometry(0.34, 0.24, 0.32), pale, [0.98, 0.56, 1.08]));
 
   const focusLabel = makeLabelSprite("초점 조절 나사", 1.08, 0.2);
-  focusLabel.position.set(1.44, 2.58, 0.42);
-  focusLabel.rotation.y = -0.16;
+  focusLabel.position.set(1.82, 2.34, -1.1);
+  focusLabel.rotation.y = -0.04;
   root.add(focusLabel);
 
   const lightLabel = makeLabelSprite("조명 조절 나사", 1.0, 0.19);
-  lightLabel.position.set(1.24, 0.9, 1.34);
+  lightLabel.position.set(1.36, 1.02, 1.32);
   lightLabel.rotation.y = -0.4;
   root.add(lightLabel);
 
-  const labelCanvas = makeLabelTexture("1X / 2X / 4X");
-  const label = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.15, 0.22),
-    new THREE.MeshBasicMaterial({ map: labelCanvas, transparent: true }),
-  );
-  label.position.set(OPTICAL_AXIS_X - 0.15, 0.68, 1.0);
-  label.rotation.x = -0.52;
-  root.add(label);
+  const eyepieceLabel = makeLabelSprite("접안렌즈", 0.82, 0.2);
+  eyepieceLabel.position.set(0.84, 3.9, -0.86);
+  eyepieceLabel.rotation.y = -0.24;
+  focusCarrier.add(eyepieceLabel);
+
+  const stageLabel = makeLabelSprite("조리대", 0.68, 0.19);
+  stageLabel.position.set(OPTICAL_AXIS_X - 0.82, 0.98, 0.36);
+  stageLabel.rotation.y = 0.24;
+  root.add(stageLabel);
 }
 
 function makeNoiseTexture(base, fleck, strength) {
@@ -725,11 +747,21 @@ function createSmallKnob(knobMaterial) {
 
 function makeLabelSprite(text, width, height) {
   const labelTexture = makeLabelTexture(text);
-  const label = new THREE.Mesh(
+  const group = new THREE.Group();
+  const front = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
     new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true }),
   );
-  return label;
+  const back = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true }),
+  );
+  front.position.z = 0.003;
+  back.position.z = -0.003;
+  back.rotation.y = Math.PI;
+  group.add(front);
+  group.add(back);
+  return group;
 }
 
 function makeLabelTexture(text) {
@@ -778,13 +810,15 @@ function drawScope(ctx, canvas) {
 
   ctx.save();
   ctx.translate(center, center);
-  ctx.scale(zoomScale, zoomScale);
+  if (specimen.id !== "hyphae") {
+    ctx.scale(zoomScale, zoomScale);
+  }
   ctx.translate(-center, -center);
   ctx.filter = `blur(${blur}px)`;
-  if (specimen.id === "hyphae") drawHyphae(ctx, size);
-  if (specimen.id === "mold") drawMold(ctx, size);
-  if (specimen.id === "spirogyra") drawSpirogyra(ctx, size);
-  if (specimen.id === "paramecium") drawParamecium(ctx, size);
+  if (specimen.id === "hyphae") drawHyphaePhoto(ctx, size, state.zoom) || drawHyphae(ctx, size, state.zoom);
+  if (specimen.id === "mold") drawMold(ctx, size, state.zoom);
+  if (specimen.id === "spirogyra") drawSpirogyra(ctx, size, state.zoom);
+  if (specimen.id === "paramecium") drawParamecium(ctx, size, state.zoom);
   ctx.filter = "none";
   ctx.restore();
 
@@ -814,25 +848,49 @@ function drawParticles(ctx, size) {
   }
 }
 
-function drawHyphae(ctx, size) {
+function drawHyphaePhoto(ctx, size, zoomIndex) {
+  const image = hyphaePhotos[zoomIndex];
+  if (!image || !image.complete || image.naturalWidth === 0) return false;
+
+  const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+  const sourceX = (image.naturalWidth - sourceSize) / 2;
+  const sourceY = (image.naturalHeight - sourceSize) / 2;
+  ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+  return true;
+}
+
+function drawHyphae(ctx, size, zoomIndex = 1) {
   ctx.strokeStyle = "rgba(93, 71, 43, 0.68)";
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 22; i += 1) {
-    const y = 80 + i * 17 + Math.sin(state.time * 0.7 + i) * 2;
+  ctx.lineWidth = zoomIndex === 2 ? 5 : 3;
+  const rowCount = zoomIndex === 0 ? 15 : zoomIndex === 1 ? 22 : 12;
+  const spacing = zoomIndex === 0 ? 25 : zoomIndex === 1 ? 17 : 34;
+  for (let i = 0; i < rowCount; i += 1) {
+    const y = 76 + i * spacing + Math.sin(state.time * 0.7 + i) * 2;
     ctx.beginPath();
     ctx.moveTo(-30, y);
-    for (let x = -30; x < size + 30; x += 56) {
-      ctx.quadraticCurveTo(x + 28, y + Math.sin(i + x * 0.03) * 18, x + 56, y + Math.cos(i + x * 0.02) * 12);
+    const segment = zoomIndex === 2 ? 74 : 56;
+    for (let x = -30; x < size + 30; x += segment) {
+      ctx.quadraticCurveTo(x + segment / 2, y + Math.sin(i + x * 0.03) * 18, x + segment, y + Math.cos(i + x * 0.02) * 12);
     }
     ctx.stroke();
+
+    if (zoomIndex === 2 && i % 2 === 0) {
+      ctx.fillStyle = "rgba(98, 72, 44, 0.42)";
+      for (let x = 45; x < size; x += 120) {
+        ctx.beginPath();
+        ctx.arc(x + Math.sin(i) * 8, y + Math.cos(x) * 4, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 }
 
-function drawMold(ctx, size) {
-  drawHyphae(ctx, size);
+function drawMold(ctx, size, zoomIndex = 1) {
+  drawHyphae(ctx, size, zoomIndex);
   ctx.fillStyle = "rgba(84, 102, 65, 0.74)";
   ctx.strokeStyle = "rgba(58, 71, 45, 0.65)";
-  for (let i = 0; i < 16; i += 1) {
+  const sporeCount = zoomIndex === 0 ? 9 : zoomIndex === 1 ? 16 : 26;
+  for (let i = 0; i < sporeCount; i += 1) {
     const x = 90 + ((i * 83) % 360);
     const y = 95 + ((i * 59) % 330);
     const pulse = Math.sin(state.time * 0.9 + i) * 0.8;
@@ -841,17 +899,30 @@ function drawMold(ctx, size) {
     ctx.lineTo(x + Math.sin(i) * 18, y + 5);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(x + Math.sin(i) * 18, y, 10 + (i % 3) * 3 + pulse, 0, Math.PI * 2);
+    ctx.arc(x + Math.sin(i) * 18, y, 8 + zoomIndex * 5 + (i % 3) * 2 + pulse, 0, Math.PI * 2);
     ctx.fill();
+
+    if (zoomIndex === 2) {
+      ctx.fillStyle = "rgba(48, 62, 38, 0.5)";
+      for (let j = 0; j < 4; j += 1) {
+        ctx.beginPath();
+        ctx.arc(x + Math.sin(i) * 18 + Math.cos(j * 1.7) * 9, y + Math.sin(j * 1.7) * 9, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(84, 102, 65, 0.74)";
+    }
   }
 }
 
-function drawSpirogyra(ctx, size) {
+function drawSpirogyra(ctx, size, zoomIndex = 1) {
   ctx.lineCap = "round";
-  for (let row = 0; row < 4; row += 1) {
-    const offsetY = 120 + row * 78;
+  const rows = zoomIndex === 0 ? 5 : zoomIndex === 1 ? 4 : 2;
+  const tubeWidth = zoomIndex === 0 ? 14 : zoomIndex === 1 ? 22 : 42;
+  const rowGap = zoomIndex === 2 ? 138 : 78;
+  for (let row = 0; row < rows; row += 1) {
+    const offsetY = zoomIndex === 2 ? 170 + row * rowGap : 110 + row * rowGap;
     ctx.strokeStyle = "rgba(41, 125, 54, 0.72)";
-    ctx.lineWidth = 22;
+    ctx.lineWidth = tubeWidth;
     ctx.beginPath();
     for (let x = -20; x < size + 30; x += 18) {
       const y = offsetY + Math.sin(x * 0.018 + state.time * 0.8 + row) * 20;
@@ -861,24 +932,38 @@ function drawSpirogyra(ctx, size) {
     ctx.stroke();
 
     ctx.strokeStyle = "rgba(209, 237, 170, 0.8)";
-    ctx.lineWidth = 3;
-    for (let x = 30; x < size; x += 42) {
+    ctx.lineWidth = zoomIndex === 2 ? 5 : 3;
+    const spiralStep = zoomIndex === 2 ? 30 : 42;
+    for (let x = 30; x < size; x += spiralStep) {
       ctx.beginPath();
-      ctx.moveTo(x, offsetY - 18);
-      ctx.lineTo(x + 14, offsetY + 18);
+      ctx.moveTo(x, offsetY - tubeWidth * 0.8);
+      ctx.lineTo(x + 14, offsetY + tubeWidth * 0.8);
       ctx.stroke();
+    }
+
+    if (zoomIndex === 2) {
+      ctx.strokeStyle = "rgba(22, 89, 36, 0.36)";
+      ctx.lineWidth = 1.5;
+      for (let x = 56; x < size; x += 72) {
+        ctx.beginPath();
+        ctx.moveTo(x, offsetY - tubeWidth * 0.55);
+        ctx.lineTo(x, offsetY + tubeWidth * 0.55);
+        ctx.stroke();
+      }
     }
   }
 }
 
-function drawParamecium(ctx, size) {
+function drawParamecium(ctx, size, zoomIndex = 1) {
   const x = size / 2 + Math.sin(state.time * 0.55) * 96;
   const y = size / 2 + Math.cos(state.time * 0.42) * 70;
   const angle = Math.sin(state.time * 0.65) * 0.9;
+  const bodyScale = zoomIndex === 0 ? 0.58 : zoomIndex === 1 ? 1 : 1.72;
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
+  ctx.scale(bodyScale, bodyScale);
   ctx.fillStyle = "rgba(202, 190, 137, 0.78)";
   ctx.strokeStyle = "rgba(101, 88, 62, 0.65)";
   ctx.lineWidth = 4;
@@ -903,6 +988,21 @@ function drawParamecium(ctx, size) {
   ctx.beginPath();
   ctx.ellipse(-8, -8, 18, 38, -0.3, 0, Math.PI * 2);
   ctx.fill();
+
+  if (zoomIndex === 2) {
+    ctx.fillStyle = "rgba(92, 76, 52, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(18, 32, 8, 18, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(80, 72, 58, 0.28)";
+    ctx.lineWidth = 1;
+    for (let i = -44; i <= 44; i += 14) {
+      ctx.beginPath();
+      ctx.moveTo(i, -80);
+      ctx.quadraticCurveTo(i + 8, -8, i - 5, 82);
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
