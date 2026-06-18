@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>생물 관찰 현미경 시뮬레이션</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="lab" aria-label="3D 현미경 조작 영역">
+        <div id="scene" class="scene"></div>
+        <div class="scene-badge">
+          <span>2단계 반자동 조작</span>
+          <strong id="activePart">표본을 골라 관찰을 시작하세요</strong>
+        </div>
+        <button id="observeButton" class="scene-observe-button" type="button">
+          관찰하기
+          <span>접안렌즈 쪽으로 이동해 표본을 크게 봅니다.</span>
+        </button>
+        <section id="observationOverlay" class="lab-scope-overlay" aria-label="현미경 확대 관찰 화면" aria-hidden="true">
+          <div class="overlay-bar">
+            <div>
+              <span id="overlaySpecimen">버섯 균사</span>
+              <strong id="overlayState">현미경 확대 화면</strong>
+            </div>
+            <button id="exitObserveButton" type="button">돌아가기</button>
+          </div>
+          <canvas id="fullScopeCanvas" width="1200" height="1200" aria-label="왼쪽 전체 현미경 시야"></canvas>
+        </section>
+      </section>
+
+      <aside class="panel" aria-label="관찰 조작 패널">
+        <header class="panel-header">
+          <p>4학년 과학</p>
+          <h1>현미경으로 다양한 생물 관찰하기</h1>
+        </header>
+
+        <section class="control-group">
+          <h2>표본 선택</h2>
+          <div class="specimen-grid" id="specimenGrid"></div>
+        </section>
+
+        <section class="control-group">
+          <h2>현미경 조작</h2>
+          <ol class="step-list" aria-label="관찰 진행 단계">
+            <li data-step="specimen" class="is-done">표본 올리기</li>
+            <li data-step="light">조명 맞추기</li>
+            <li data-step="focus">초점 맞추기</li>
+            <li data-step="note">기록하기</li>
+          </ol>
+          <div class="readout">
+            <div>
+              <span>추천 배율</span>
+              <strong id="magnification">40배</strong>
+            </div>
+            <div>
+              <span>관찰 목표</span>
+              <strong id="targetFeature">균사 찾기</strong>
+            </div>
+          </div>
+
+          <label class="slider-row">
+            <span>조명</span>
+            <input id="lightControl" type="range" min="0" max="100" value="64" />
+            <output id="lightValue">64</output>
+          </label>
+          <p class="part-guide">받침대 옆 <strong>조명 조절 나사</strong>를 돌려 시야 밝기를 맞춥니다.</p>
+
+          <label class="slider-row">
+            <span>초점</span>
+            <input id="focusControl" type="range" min="0" max="100" value="35" />
+            <output id="focusValue">35</output>
+          </label>
+          <p class="part-guide">몸체 옆 큰 <strong>초점 조절 나사</strong>를 돌리면 대물렌즈 쪽이 위아래로 움직입니다.</p>
+
+          <label class="slider-row">
+            <span>배율</span>
+            <input id="zoomControl" type="range" min="0" max="2" value="1" step="1" />
+            <output id="zoomValue">2X</output>
+          </label>
+          <p class="part-guide"><strong>회전판</strong>을 돌려 대물렌즈 배율을 조절합니다.</p>
+
+          <p class="hint" id="hint">조명을 중간보다 조금 밝게 하고, 초점을 천천히 맞춰 보세요.</p>
+        </section>
+
+        <section class="control-group">
+          <h2>관찰 노트</h2>
+          <div class="note">
+            <p id="notePrompt">버섯 균사는 어떤 모양인가요?</p>
+            <textarea id="observationNote" rows="4" placeholder="관찰한 모양과 움직임을 써 보세요."></textarea>
+          </div>
+          <div class="saved-notes" id="savedNotes" aria-label="저장된 관찰 기록"></div>
+          <div class="mission" id="missionStatus">아직 관찰 성공 전입니다.</div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
