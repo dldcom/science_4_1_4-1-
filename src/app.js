@@ -57,6 +57,8 @@ const zoomLevels = [
   { label: "4X", scale: 1.42, ring: Math.PI * 1.2 },
 ];
 
+const OPTICAL_AXIS_X = -0.38;
+
 const state = {
   specimen: specimens[0],
   focus: 35,
@@ -66,10 +68,9 @@ const state = {
   pointerDown: false,
   lastX: 0,
   lastY: 0,
-  rotation: -0.18,
-  tilt: 0,
+  orbitYaw: 0.61,
+  orbitPitch: 0.27,
   viewZoom: 1,
-  notes: {},
   completed: new Set(),
 };
 
@@ -83,18 +84,15 @@ const zoomValue = document.querySelector("#zoomValue");
 const magnification = document.querySelector("#magnification");
 const targetFeature = document.querySelector("#targetFeature");
 const hint = document.querySelector("#hint");
-const notePrompt = document.querySelector("#notePrompt");
-const observationNote = document.querySelector("#observationNote");
-const savedNotes = document.querySelector("#savedNotes");
-const missionStatus = document.querySelector("#missionStatus");
 const activePart = document.querySelector("#activePart");
 const scopeCanvas = document.createElement("canvas");
 scopeCanvas.width = 520;
 scopeCanvas.height = 520;
 const scopeContext = scopeCanvas.getContext("2d");
+const eyepieceGlowTexture = makeEyepieceGlowTexture();
 const fullScopeCanvas = document.querySelector("#fullScopeCanvas");
 const fullScopeContext = fullScopeCanvas.getContext("2d");
-const observeButton = document.querySelector("#observeButton");
+const eyepieceObservePrompt = document.querySelector("#eyepieceObservePrompt");
 const exitObserveButton = document.querySelector("#exitObserveButton");
 const observationOverlay = document.querySelector("#observationOverlay");
 const overlaySpecimen = document.querySelector("#overlaySpecimen");
@@ -114,8 +112,11 @@ let slideGlass;
 let sceneCamera;
 const defaultCameraPosition = new THREE.Vector3(5.0, 4.0, 7.3);
 const defaultCameraLookAt = new THREE.Vector3(-0.05, 1.55, 0.08);
+const defaultCameraOffset = defaultCameraPosition.clone().sub(defaultCameraLookAt);
+const defaultCameraDistance = defaultCameraOffset.length();
+const defaultOrbitYaw = Math.atan2(defaultCameraOffset.x, defaultCameraOffset.z);
+const defaultOrbitPitch = Math.asin(defaultCameraOffset.y / defaultCameraDistance);
 let cameraLookAt = defaultCameraLookAt.clone();
-let cameraTravel = null;
 const scenePointers = new Map();
 let lastPinchDistance = 0;
 
@@ -140,7 +141,6 @@ function selectSpecimen(id) {
   document.querySelectorAll(".specimen-button").forEach((button) => {
     button.setAttribute("aria-pressed", button.dataset.specimen === id ? "true" : "false");
   });
-  observationNote.value = state.notes[id] ?? "";
   activePart.textContent = `${state.specimen.name} 표본을 재물대에 올렸습니다`;
   updateUi();
 }
@@ -152,31 +152,23 @@ function updateUi() {
   magnification.textContent = state.specimen.magnification;
   targetFeature.textContent = state.specimen.target;
   overlaySpecimen.textContent = state.specimen.name;
-  notePrompt.textContent = state.specimen.prompt;
   hint.textContent = state.specimen.hint;
 
   const focusDelta = Math.abs(state.focus - state.specimen.idealFocus);
   const lightDelta = Math.abs(state.light - state.specimen.idealLight);
   const lightReady = lightDelta < 18;
   const focusReady = focusDelta < 9;
-  const noteReady = (state.notes[state.specimen.id] ?? "").trim().length >= 5;
 
-  updateSteps(lightReady, focusReady, noteReady);
+  updateSteps(lightReady, focusReady);
 
   if (focusDelta < 9 && lightDelta < 18) {
     overlayState.textContent = "관찰 성공";
-    if (noteReady) {
-      state.completed.add(state.specimen.id);
-      missionStatus.textContent = `${state.specimen.name} 기록 완료! 다른 표본도 관찰해 보세요.`;
-    } else {
-      missionStatus.textContent = `${state.specimen.target} 성공! 관찰 노트에 특징을 적어 보세요.`;
-    }
+    state.completed.add(state.specimen.id);
+    activePart.textContent = `${state.specimen.target} 성공! 접안렌즈 가까이에서 확대 화면을 볼 수 있습니다.`;
   } else if (focusDelta < 18) {
     overlayState.textContent = "초점 거의 맞음";
-    missionStatus.textContent = "초점은 좋아요. 조명을 조금 더 조절해 보세요.";
   } else {
     overlayState.textContent = "초점 조절 중";
-    missionStatus.textContent = "아직 관찰 성공 전입니다.";
   }
 
   if (lamp) {
@@ -190,7 +182,6 @@ function updateUi() {
   }
 
   refreshButtons();
-  renderSavedNotes();
 }
 
 lightControl.addEventListener("input", (event) => {
@@ -211,13 +202,8 @@ zoomControl.addEventListener("input", (event) => {
   updateUi();
 });
 
-observationNote.addEventListener("input", (event) => {
-  state.notes[state.specimen.id] = event.target.value;
-  updateUi();
-});
-
-observeButton.addEventListener("click", () => {
-  startObservationTravel();
+eyepieceObservePrompt.addEventListener("click", () => {
+  openObservationOverlay();
 });
 
 exitObserveButton.addEventListener("click", () => {
@@ -230,12 +216,11 @@ observationOverlay.addEventListener("click", (event) => {
   }
 });
 
-function updateSteps(lightReady, focusReady, noteReady) {
+function updateSteps(lightReady, focusReady) {
   const steps = {
     specimen: true,
     light: lightReady,
     focus: focusReady,
-    note: noteReady,
   };
   document.querySelectorAll(".step-list li").forEach((item) => {
     const done = steps[item.dataset.step];
@@ -245,7 +230,7 @@ function updateSteps(lightReady, focusReady, noteReady) {
 }
 
 function firstPendingStep(steps) {
-  return ["specimen", "light", "focus", "note"].find((key) => !steps[key]);
+  return ["specimen", "light", "focus"].find((key) => !steps[key]);
 }
 
 function refreshButtons() {
@@ -254,30 +239,6 @@ function refreshButtons() {
     const done = state.completed.has(button.dataset.specimen);
     button.classList.toggle("is-complete", done);
     button.innerHTML = `<strong>${specimen.name}${done ? " ✓" : ""}</strong><span>${specimen.kind} · ${specimen.magnification}</span>`;
-  });
-}
-
-function renderSavedNotes() {
-  const entries = specimens
-    .map((specimen) => ({ specimen, note: (state.notes[specimen.id] ?? "").trim() }))
-    .filter((entry) => entry.note.length > 0);
-
-  savedNotes.innerHTML = entries
-    .map(
-      (entry) => `
-        <article class="saved-note">
-          <strong>${entry.specimen.name}</strong>
-          <p>${escapeHtml(entry.note)}</p>
-        </article>
-      `,
-    )
-    .join("");
-}
-
-function escapeHtml(text) {
-  return text.replace(/[&<>"']/g, (char) => {
-    const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-    return entities[char];
   });
 }
 
@@ -308,7 +269,7 @@ function createScene() {
   scene.add(key);
 
   lamp = new THREE.PointLight(0xdff8ff, 1.55, 9);
-  lamp.position.set(0, 0.55, 0.2);
+  lamp.position.set(OPTICAL_AXIS_X, 0.55, 0.2);
   scene.add(lamp);
 
   const table = new THREE.Mesh(
@@ -320,7 +281,6 @@ function createScene() {
   scene.add(table);
 
   microscopeGroup = new THREE.Group();
-  microscopeGroup.rotation.y = state.rotation;
   scene.add(microscopeGroup);
 
   buildMicroscope(microscopeGroup);
@@ -349,7 +309,7 @@ function createScene() {
     if (scenePointers.size === 2) {
       const pinchDistance = getPinchDistance();
       if (lastPinchDistance > 0) {
-        state.viewZoom = THREE.MathUtils.clamp(state.viewZoom + (pinchDistance - lastPinchDistance) * 0.004, 0.72, 1.7);
+        state.viewZoom = THREE.MathUtils.clamp(state.viewZoom + (pinchDistance - lastPinchDistance) * 0.006, 0.45, 4.2);
       }
       lastPinchDistance = pinchDistance;
       return;
@@ -358,8 +318,8 @@ function createScene() {
     const deltaY = event.clientY - state.lastY;
     state.lastX = event.clientX;
     state.lastY = event.clientY;
-    state.rotation += deltaX * 0.006;
-    state.tilt = THREE.MathUtils.clamp(state.tilt + deltaY * 0.004, -0.36, 0.34);
+    state.orbitYaw -= deltaX * 0.006;
+    state.orbitPitch = THREE.MathUtils.clamp(state.orbitPitch + deltaY * 0.004, -1.18, 1.18);
   });
 
   renderer.domElement.addEventListener("pointerup", (event) => {
@@ -376,23 +336,21 @@ function createScene() {
 
   renderer.domElement.addEventListener("wheel", (event) => {
     event.preventDefault();
-    state.viewZoom = THREE.MathUtils.clamp(state.viewZoom - event.deltaY * 0.0012, 0.72, 1.7);
+    state.viewZoom = THREE.MathUtils.clamp(state.viewZoom - event.deltaY * 0.002, 0.45, 4.2);
   }, { passive: false });
 
   renderer.domElement.addEventListener("dblclick", () => {
-    state.rotation = -0.18;
-    state.tilt = 0;
+    state.orbitYaw = defaultOrbitYaw;
+    state.orbitPitch = defaultOrbitPitch;
     state.viewZoom = 1;
   });
 
   function animate() {
     requestAnimationFrame(animate);
     state.time += 0.016;
-    microscopeGroup.rotation.y += (state.rotation - microscopeGroup.rotation.y) * 0.08;
-    microscopeGroup.rotation.x += (state.tilt - microscopeGroup.rotation.x) * 0.08;
-    camera.zoom += (state.viewZoom - camera.zoom) * 0.12;
+    updateOrbitCamera(camera);
+    camera.zoom += (1 - camera.zoom) * 0.12;
     camera.updateProjectionMatrix();
-    updateCameraTravel();
     const focusHeight = THREE.MathUtils.mapLinear(state.focus, 0, 100, -0.34, 0.34);
     focusCarrier.position.y += (focusHeight - focusCarrier.position.y) * 0.12;
     focusKnobLeft.rotation.z = state.focus * 0.045;
@@ -401,8 +359,9 @@ function createScene() {
     const zoom = zoomLevels[state.zoom];
     revolvingRing.rotation.y += (zoom.ring - revolvingRing.rotation.y) * 0.14;
     objectiveHousing.rotation.y += (zoom.ring * 0.55 - objectiveHousing.rotation.y) * 0.14;
-    specimenPlate.position.x = 0;
+    specimenPlate.position.x = OPTICAL_AXIS_X;
     camera.lookAt(cameraLookAt);
+    updateEyepiecePrompt(camera, host);
     renderer.render(scene, camera);
     drawScope(scopeContext, scopeCanvas);
     if (observationOverlay.classList.contains("is-open")) {
@@ -413,65 +372,54 @@ function createScene() {
   animate();
 }
 
+function updateOrbitCamera(camera) {
+  const distance = defaultCameraDistance / state.viewZoom;
+  const horizontalDistance = Math.cos(state.orbitPitch) * distance;
+  const targetPosition = new THREE.Vector3(
+    cameraLookAt.x + Math.sin(state.orbitYaw) * horizontalDistance,
+    cameraLookAt.y + Math.sin(state.orbitPitch) * distance,
+    cameraLookAt.z + Math.cos(state.orbitYaw) * horizontalDistance,
+  );
+  camera.position.lerp(targetPosition, 0.12);
+}
+
+function updateEyepiecePrompt(camera, host) {
+  if (!microscopeGroup || observationOverlay.classList.contains("is-open")) {
+    eyepieceObservePrompt.classList.remove("is-visible");
+    eyepieceObservePrompt.setAttribute("aria-hidden", "true");
+    return;
+  }
+
+  const eyepiecePosition = microscopeGroup.localToWorld(new THREE.Vector3(OPTICAL_AXIS_X + 0.05, 3.9, -0.82));
+  const distance = camera.position.distanceTo(eyepiecePosition);
+  const projected = eyepiecePosition.clone().project(camera);
+  const nearScreenCenter = Math.abs(projected.x) < 0.46 && Math.abs(projected.y) < 0.54;
+  const inFrontOfCamera = projected.z > -1 && projected.z < 1;
+  const shouldShow = distance < 3.25 && nearScreenCenter && inFrontOfCamera;
+
+  eyepieceObservePrompt.classList.toggle("is-visible", shouldShow);
+  eyepieceObservePrompt.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+
+  if (shouldShow) {
+    const x = (projected.x * 0.5 + 0.5) * host.clientWidth;
+    const y = (-projected.y * 0.5 + 0.5) * host.clientHeight;
+    eyepieceObservePrompt.style.left = `${x}px`;
+    eyepieceObservePrompt.style.top = `${y}px`;
+  }
+}
+
 function getPinchDistance() {
   const points = Array.from(scenePointers.values());
   if (points.length < 2) return 0;
   return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
 }
 
-function startObservationTravel() {
-  if (!sceneCamera || !microscopeGroup) return;
-  activePart.textContent = "접안렌즈 쪽으로 이동하는 중입니다";
-  overlayState.textContent = "접안렌즈로 이동 중";
-  observationOverlay.classList.remove("is-open");
-  observationOverlay.setAttribute("aria-hidden", "true");
-
-  const startPosition = sceneCamera.position.clone();
-  const startLookAt = cameraLookAt.clone();
-  const aboveEyepiece = microscopeGroup.localToWorld(new THREE.Vector3(0.05, 4.18, -0.72));
-  const eyeAtLens = microscopeGroup.localToWorld(new THREE.Vector3(0.05, 3.78, -1.08));
-  const lookAbove = microscopeGroup.localToWorld(new THREE.Vector3(0.02, 3.72, -0.74));
-  const lookIntoLens = microscopeGroup.localToWorld(new THREE.Vector3(0.02, 3.36, -0.44));
-
-  cameraTravel = {
-    startTime: performance.now(),
-    duration: 1450,
-    onComplete: openObservationOverlay,
-    points: [
-      { position: startPosition, lookAt: startLookAt },
-      { position: aboveEyepiece, lookAt: lookAbove },
-      { position: eyeAtLens, lookAt: lookIntoLens },
-    ],
-  };
-}
-
-function updateCameraTravel() {
-  if (!cameraTravel || !sceneCamera) return;
-  const elapsed = performance.now() - cameraTravel.startTime;
-  const t = Math.min(1, elapsed / cameraTravel.duration);
-  const segmentCount = cameraTravel.points.length - 1;
-  const rawSegment = Math.min(segmentCount - 1, Math.floor(t * segmentCount));
-  const localStart = rawSegment / segmentCount;
-  const localEnd = (rawSegment + 1) / segmentCount;
-  const localT = (t - localStart) / (localEnd - localStart);
-  const eased = localT < 0.5 ? 4 * localT * localT * localT : 1 - Math.pow(-2 * localT + 2, 3) / 2;
-  const from = cameraTravel.points[rawSegment];
-  const to = cameraTravel.points[rawSegment + 1];
-
-  sceneCamera.position.lerpVectors(from.position, to.position, eased);
-  cameraLookAt.lerpVectors(from.lookAt, to.lookAt, eased);
-
-  if (t >= 1) {
-    const onComplete = cameraTravel.onComplete;
-    cameraTravel = null;
-    if (onComplete) onComplete();
-  }
-}
-
 function openObservationOverlay() {
   resizeFullScopeCanvas();
   overlaySpecimen.textContent = state.specimen.name;
   overlayState.textContent = "현미경 확대 화면";
+  eyepieceObservePrompt.classList.remove("is-visible");
+  eyepieceObservePrompt.setAttribute("aria-hidden", "true");
   observationOverlay.classList.add("is-open");
   observationOverlay.setAttribute("aria-hidden", "false");
   drawScope(fullScopeContext, fullScopeCanvas);
@@ -480,20 +428,6 @@ function openObservationOverlay() {
 function closeObservationOverlay() {
   observationOverlay.classList.remove("is-open");
   observationOverlay.setAttribute("aria-hidden", "true");
-  activePart.textContent = "3D 현미경 화면으로 돌아가는 중입니다";
-  if (!sceneCamera) return;
-
-  cameraTravel = {
-    startTime: performance.now(),
-    duration: 800,
-    onComplete: () => {
-      activePart.textContent = "표본을 골라 관찰을 시작하세요";
-    },
-    points: [
-      { position: sceneCamera.position.clone(), lookAt: cameraLookAt.clone() },
-      { position: defaultCameraPosition.clone(), lookAt: defaultCameraLookAt.clone() },
-    ],
-  };
 }
 
 function resizeFullScopeCanvas() {
@@ -525,6 +459,46 @@ function mesh(geometry, mat, position, rotation = [0, 0, 0], cast = true) {
   return item;
 }
 
+function makeEyepieceGlowTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  const center = canvas.width / 2;
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const lensGlow = context.createRadialGradient(center, center, 0, center, center, 112);
+  lensGlow.addColorStop(0, "rgba(236, 255, 247, 0.62)");
+  lensGlow.addColorStop(0.18, "rgba(184, 226, 202, 0.28)");
+  lensGlow.addColorStop(0.34, "rgba(70, 90, 78, 0.18)");
+  lensGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+  context.fillStyle = lensGlow;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.save();
+  context.beginPath();
+  context.arc(center, center, 31, 0, Math.PI * 2);
+  context.clip();
+  context.globalAlpha = 0.46;
+  context.filter = "blur(5px)";
+  context.strokeStyle = "rgba(73, 120, 82, 0.9)";
+  context.lineWidth = 3;
+  for (let i = 0; i < 5; i += 1) {
+    const y = center - 18 + i * 9;
+    context.beginPath();
+    context.moveTo(center - 34, y);
+    context.quadraticCurveTo(center - 10, y - 10, center + 10, y + 3);
+    context.quadraticCurveTo(center + 24, y + 12, center + 36, y - 2);
+    context.stroke();
+  }
+  context.filter = "none";
+  context.restore();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function buildMicroscope(root) {
   const enamel = material(0xe8edf0, 0.36, 0.12);
   enamel.map = makeNoiseTexture("#e7edf0", "#d0d9dd", 0.08);
@@ -543,6 +517,15 @@ function buildMicroscope(root) {
     transparent: true,
     opacity: 0.62,
   });
+  const eyepieceGlass = new THREE.MeshPhysicalMaterial({
+    map: eyepieceGlowTexture,
+    color: 0xdff8ff,
+    roughness: 0.04,
+    metalness: 0,
+    transmission: 0.18,
+    transparent: true,
+    opacity: 0.92,
+  });
 
   root.add(mesh(new THREE.BoxGeometry(3.5, 0.18, 2.75), metal, [0, 0.02, 0]));
   root.add(mesh(new THREE.BoxGeometry(3.32, 0.42, 2.55), pale, [0, 0.18, 0]));
@@ -552,7 +535,7 @@ function buildMicroscope(root) {
   specimenPlate = mesh(
     new THREE.CylinderGeometry(0.56, 0.56, 0.035, 72),
     new THREE.MeshPhysicalMaterial({ color: 0xcfe6ea, roughness: 0.04, transmission: 0.22, transparent: true, opacity: 0.5 }),
-    [0, 0.66, 0.08],
+    [OPTICAL_AXIS_X, 0.66, 0.08],
     [0, 0, 0],
     false,
   );
@@ -560,7 +543,7 @@ function buildMicroscope(root) {
   slideGlass = mesh(
     new THREE.BoxGeometry(1.18, 0.025, 0.54),
     new THREE.MeshPhysicalMaterial({ color: 0xf2f5ed, roughness: 0.08, transmission: 0.25, transparent: true, opacity: 0.55 }),
-    [0, 0.72, 0.08],
+    [OPTICAL_AXIS_X, 0.72, 0.08],
     [0, 0.08, 0],
     false,
   );
@@ -574,6 +557,7 @@ function buildMicroscope(root) {
   root.add(arm);
 
   focusCarrier = new THREE.Group();
+  focusCarrier.position.x = OPTICAL_AXIS_X;
   root.add(focusCarrier);
 
   const head = new THREE.Group();
@@ -586,8 +570,10 @@ function buildMicroscope(root) {
   head.add(mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.72, 48), pale, [0.36, 0.46, -0.28], [-0.52, 0.04, 0.08]));
   head.add(mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.52, 48), black, [-0.42, 0.78, -0.56], [-0.52, 0.04, -0.08]));
   head.add(mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.52, 48), black, [0.42, 0.78, -0.56], [-0.52, 0.04, 0.08]));
-  head.add(mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 48), glass, [-0.52, 0.96, -0.78], [-0.52, 0.04, -0.08], false));
-  head.add(mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 48), glass, [0.52, 0.96, -0.78], [-0.52, 0.04, 0.08], false));
+  head.add(mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.035, 48), black, [-0.44, 1.0, -0.69], [-0.52, 0.04, -0.08]));
+  head.add(mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.035, 48), black, [0.4, 1.0, -0.69], [-0.52, 0.04, 0.08]));
+  head.add(mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.045, 64), eyepieceGlass, [-0.44, 1.015, -0.7], [-0.52, 0.04, -0.08], false));
+  head.add(mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.045, 64), eyepieceGlass, [0.4, 1.015, -0.7], [-0.52, 0.04, 0.08], false));
 
   const nosepiece = new THREE.Group();
   nosepiece.position.set(0, 2.15, 0.08);
@@ -633,8 +619,8 @@ function buildMicroscope(root) {
   root.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.96, 32), metal, [0.72, 2.02, -0.72], [0, 0, Math.PI / 2]));
   root.add(mesh(new THREE.BoxGeometry(0.4, 0.62, 0.4), pale, [0.72, 2.0, -0.54]));
 
-  root.add(mesh(new THREE.CylinderGeometry(0.24, 0.32, 0.42, 48), glass, [0, 0.42, 0.08]));
-  root.add(mesh(new THREE.CylinderGeometry(0.42, 0.58, 0.16, 48), metal, [0, 0.74, 0.08]));
+  root.add(mesh(new THREE.CylinderGeometry(0.24, 0.32, 0.42, 48), glass, [OPTICAL_AXIS_X, 0.42, 0.08]));
+  root.add(mesh(new THREE.CylinderGeometry(0.42, 0.58, 0.16, 48), metal, [OPTICAL_AXIS_X, 0.74, 0.08]));
   lightKnob = createSmallKnob(rubber);
   lightKnob.position.set(1.28, 0.56, 1.08);
   lightKnob.rotation.y = Math.PI / 2;
@@ -657,7 +643,7 @@ function buildMicroscope(root) {
     new THREE.PlaneGeometry(1.15, 0.22),
     new THREE.MeshBasicMaterial({ map: labelCanvas, transparent: true }),
   );
-  label.position.set(-0.15, 0.68, 1.0);
+  label.position.set(OPTICAL_AXIS_X - 0.15, 0.68, 1.0);
   label.rotation.x = -0.52;
   root.add(label);
 }
