@@ -9,9 +9,32 @@
   <body>
     <main class="app">
       <section class="lab" aria-label="3D 현미경 조작 영역">
+        <section id="lessonChooser" class="lesson-chooser" aria-label="차시 선택">
+          <div class="lesson-panel">
+            <h1>차시 선택</h1>
+            <div class="lesson-grid">
+              <button class="lesson-button" type="button" data-lesson="1">
+                <strong>1차시</strong>
+                <span>버섯 균사 · 곰팡이</span>
+              </button>
+              <button class="lesson-button" type="button" data-lesson="2">
+                <strong>2차시</strong>
+                <span>해캄 · 짚신벌레</span>
+              </button>
+              <button class="lesson-button" type="button" data-lesson="3">
+                <strong>3차시</strong>
+                <span>세균</span>
+              </button>
+              <button class="lesson-button" type="button" data-lesson="all">
+                <strong>전체</strong>
+                <span>모든 생물 관찰하기</span>
+              </button>
+            </div>
+          </div>
+        </section>
         <div id="scene" class="scene"></div>
         <div class="specimen-picker" aria-label="표본 선택">
-          <h2>표본 선택</h2>
+          <h2 id="specimenPickerTitle">표본 선택</h2>
           <div class="specimen-grid" id="specimenGrid"></div>
         </div>
         <div class="scope-controls" aria-label="현미경 조작">

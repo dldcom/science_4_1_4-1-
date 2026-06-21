@@ -7,6 +7,8 @@
   --accent: #1e7b8f;
   --accent-strong: #155967;
   --good: #21865b;
+  --ui-border: #17282f;
+  --ui-shadow: rgba(23, 40, 47, 0.16);
 }
 
 * {
@@ -55,28 +57,112 @@ input {
   touch-action: none;
 }
 
+.lesson-chooser {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(218, 232, 237, 0.82)),
+    radial-gradient(circle at 50% 26%, #ffffff 0, #edf5f7 34%, #cadde3 100%);
+}
+
+.lesson-chooser.is-hidden {
+  display: none;
+}
+
+.lesson-panel {
+  width: min(620px, 100%);
+  padding: 28px;
+  border: 4px solid #17282f;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 250, 0.96));
+  box-shadow:
+    12px 12px 0 rgba(23, 40, 47, 0.18),
+    0 28px 80px rgba(27, 47, 56, 0.26);
+}
+
+.lesson-panel h1 {
+  margin: 0 0 22px;
+  color: #17282f;
+  font-size: 30px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.lesson-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.lesson-button {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 15px 18px;
+  border: 3px solid #17282f;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 6px 6px 0 rgba(23, 40, 47, 0.12);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.lesson-button:hover,
+.lesson-button:focus-visible {
+  border-color: var(--accent-strong);
+  background: #f3fbfd;
+  box-shadow:
+    9px 9px 0 rgba(21, 89, 103, 0.16),
+    0 14px 30px rgba(22, 82, 96, 0.16);
+  transform: translate(-2px, -2px);
+}
+
+.lesson-button strong {
+  color: #17282f;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.lesson-button span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .specimen-picker,
 .scope-controls {
   position: fixed;
   right: 16px;
   z-index: 60;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 3px solid var(--ui-border);
   border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 18px 42px rgba(27, 47, 56, 0.18);
-  backdrop-filter: blur(12px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 249, 250, 0.96));
+  box-shadow:
+    7px 7px 0 var(--ui-shadow),
+    0 18px 42px rgba(27, 47, 56, 0.18);
 }
 
 .specimen-picker {
   top: 16px;
   width: min(360px, calc(100vw - 32px));
-  padding: 12px;
+  padding: 14px;
 }
 
 .specimen-picker h2 {
-  margin: 0 0 10px;
-  color: var(--accent-strong);
-  font-size: 14px;
+  margin: 0 0 12px;
+  color: var(--ui-border);
+  font-size: 16px;
+  text-align: center;
 }
 
 .specimen-grid {
@@ -86,15 +172,17 @@ input {
 }
 
 .specimen-button {
-  min-height: 42px;
-  padding: 8px;
-  border: 1px solid var(--line);
+  min-height: 48px;
+  padding: 9px 10px;
+  border: 2px solid var(--ui-border);
   border-radius: 8px;
   background: #fff;
   color: var(--ink);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
+  box-shadow: 4px 4px 0 rgba(23, 40, 47, 0.11);
   transition:
+    background-color 140ms ease,
     border-color 140ms ease,
     transform 140ms ease,
     box-shadow 140ms ease;
@@ -102,19 +190,25 @@ input {
 
 .specimen-button:hover,
 .specimen-button:focus-visible {
-  border-color: rgba(30, 123, 143, 0.55);
-  box-shadow: 0 8px 18px rgba(22, 82, 96, 0.12);
-  transform: translateY(-1px);
+  border-color: var(--accent-strong);
+  background: #f3fbfd;
+  box-shadow:
+    6px 6px 0 rgba(21, 89, 103, 0.15),
+    0 10px 22px rgba(22, 82, 96, 0.14);
+  transform: translate(-1px, -1px);
 }
 
 .specimen-button[aria-pressed="true"] {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 2px rgba(30, 123, 143, 0.15);
+  border-color: var(--accent-strong);
+  background: #eaf7fa;
+  box-shadow:
+    4px 4px 0 rgba(21, 89, 103, 0.2),
+    inset 0 0 0 2px rgba(30, 123, 143, 0.18);
 }
 
 .specimen-button.is-complete {
-  border-color: rgba(33, 134, 91, 0.5);
-  background: #fbfdfb;
+  border-color: var(--good);
+  background: #f0fbf5;
 }
 
 .specimen-button strong {
@@ -122,37 +216,96 @@ input {
 }
 
 .specimen-button strong {
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.specimen-button span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .scope-controls {
   bottom: 16px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
   width: min(360px, calc(100vw - 32px));
-  padding: 12px;
+  padding: 14px;
 }
 
 .slider-row {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 38px;
+  grid-template-columns: 44px minmax(0, 1fr) 76px;
   align-items: center;
   gap: 10px;
-  min-height: 28px;
+  min-height: 34px;
 }
 
 .slider-row span {
+  color: var(--ui-border);
   font-weight: 800;
+  text-align: center;
 }
 
 input[type="range"] {
+  height: 18px;
   accent-color: var(--accent);
   cursor: pointer;
 }
 
+input[type="range"]:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 10px;
+  border: 2px solid var(--ui-border);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(23, 40, 47, 0.08);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 3px solid var(--ui-border);
+  border-radius: 50%;
+  background: #f3fbfd;
+  box-shadow: 3px 3px 0 rgba(23, 40, 47, 0.14);
+  appearance: none;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 10px;
+  border: 2px solid var(--ui-border);
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--ui-border);
+  border-radius: 50%;
+  background: #f3fbfd;
+  box-shadow: 3px 3px 0 rgba(23, 40, 47, 0.14);
+}
+
 output {
-  color: var(--muted);
-  text-align: right;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 2px solid var(--ui-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ui-border);
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 3px 3px 0 rgba(23, 40, 47, 0.1);
 }
 
 .eyepiece-observe-prompt {
@@ -162,16 +315,18 @@ output {
   z-index: 20;
   max-width: min(270px, calc(100% - 32px));
   min-height: 44px;
-  padding: 10px 14px;
-  border: 1px solid rgba(30, 123, 143, 0.42);
+  padding: 11px 15px;
+  border: 3px solid var(--ui-border);
   border-radius: 8px;
-  background: rgba(16, 23, 25, 0.88);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ui-border);
   cursor: pointer;
   font-size: 15px;
   font-weight: 800;
   text-align: center;
-  box-shadow: 0 18px 42px rgba(27, 47, 56, 0.22);
+  box-shadow:
+    7px 7px 0 rgba(23, 40, 47, 0.16),
+    0 18px 42px rgba(27, 47, 56, 0.22);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, calc(-100% - 16px)) scale(0.96);
@@ -189,8 +344,11 @@ output {
 
 .eyepiece-observe-prompt:hover,
 .eyepiece-observe-prompt:focus-visible {
-  outline: 3px solid rgba(30, 123, 143, 0.2);
-  outline-offset: 2px;
+  background: #f3fbfd;
+  outline: none;
+  box-shadow:
+    9px 9px 0 rgba(21, 89, 103, 0.16),
+    0 18px 42px rgba(27, 47, 56, 0.22);
 }
 
 .lab-scope-overlay {
@@ -221,8 +379,16 @@ output {
   justify-content: space-between;
   gap: 16px;
   min-height: 54px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
   padding-right: min(380px, calc(100vw - 32px));
+  border: 3px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
+  box-shadow:
+    7px 7px 0 rgba(255, 255, 255, 0.08),
+    0 16px 38px rgba(0, 0, 0, 0.28);
 }
 
 .overlay-bar span,
@@ -233,21 +399,30 @@ output {
 .overlay-bar span {
   color: rgba(255, 255, 255, 0.72);
   font-size: 14px;
+  text-align: center;
 }
 
 .overlay-bar strong {
   font-size: 22px;
+  text-align: center;
 }
 
 .overlay-bar button {
   min-width: 94px;
   min-height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.16);
   color: #fff;
   cursor: pointer;
   font-weight: 800;
+  box-shadow: 4px 4px 0 rgba(255, 255, 255, 0.08);
+}
+
+.overlay-bar button:hover,
+.overlay-bar button:focus-visible {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translate(-1px, -1px);
 }
 
 #fullScopeCanvas {
@@ -256,9 +431,12 @@ output {
   height: min(100vw, 100vh);
   justify-self: center;
   align-self: center;
-  border-radius: 12px;
+  border: 4px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
   background: #101719;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 24px 80px rgba(0, 0, 0, 0.55);
+  box-shadow:
+    10px 10px 0 rgba(255, 255, 255, 0.08),
+    0 24px 80px rgba(0, 0, 0, 0.55);
 }
 
 .lab-scope-overlay::after {

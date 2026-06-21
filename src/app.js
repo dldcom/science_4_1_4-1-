@@ -7,6 +7,7 @@ const specimens = [
     idealFocus: 72,
     idealLight: 66,
     color: "#d9c8a6",
+    zoomLabels: ["1x", "5x", "40x"],
   },
   {
     id: "mold",
@@ -14,6 +15,7 @@ const specimens = [
     idealFocus: 68,
     idealLight: 58,
     color: "#b6c8a2",
+    zoomLabels: ["1x", "5x", "40x"],
   },
   {
     id: "spirogyra",
@@ -21,6 +23,7 @@ const specimens = [
     idealFocus: 76,
     idealLight: 62,
     color: "#67a94e",
+    zoomLabels: ["1x", "200x", "250x"],
   },
   {
     id: "paramecium",
@@ -28,33 +31,143 @@ const specimens = [
     idealFocus: 74,
     idealLight: 70,
     color: "#d8d1a5",
+    zoomLabels: ["40x", "100x", "150x"],
+  },
+  {
+    id: "campylobacter",
+    name: "캄필로박터균",
+    idealFocus: 82,
+    idealLight: 74,
+    color: "#c7ded8",
+    fixedMagnification: "13,600배",
+    shape: "나선 모양 세균",
+    description: "꼬불꼬불한 모양이고, 덜 익은 음식 등을 통해 배탈이나 설사를 일으킬 수 있어요.",
+  },
+  {
+    id: "anthrax",
+    name: "탄저균",
+    idealFocus: 80,
+    idealLight: 72,
+    color: "#d8d5bd",
+    fixedMagnification: "16,900배",
+    shape: "막대 모양 세균",
+    description: "막대기처럼 생겼고, 동물이나 사람에게 위험한 병을 일으킬 수 있어요.",
+  },
+  {
+    id: "staphylococcus",
+    name: "포도알균",
+    idealFocus: 78,
+    idealLight: 70,
+    color: "#dcc8cf",
+    fixedMagnification: "6,240배",
+    shape: "공 모양 세균",
+    description: "동그란 세균들이 포도송이처럼 모여 있고, 상처에 들어가면 염증을 일으킬 수 있어요.",
   },
 ];
 
-const zoomLevels = [
+const lessons = {
+  1: {
+    title: "1차시",
+    specimens: ["hyphae", "mold"],
+  },
+  2: {
+    title: "2차시",
+    specimens: ["spirogyra", "paramecium"],
+  },
+  3: {
+    title: "3차시",
+    specimens: ["campylobacter", "anthrax", "staphylococcus"],
+  },
+};
+
+const params = new URLSearchParams(window.location.search);
+const lessonId = params.get("lesson");
+const isAllLesson = lessonId === "all";
+const currentLesson = lessons[lessonId] ?? null;
+
+const zoomStages = [
   { label: "40x", scale: 0.62, ring: 0 },
   { label: "100x", scale: 1.08, ring: Math.PI * 0.6 },
   { label: "400x", scale: 2.35, ring: Math.PI * 1.2 },
 ];
+const ZOOM_TRANSITION_DURATION = 950;
 
-const hyphaePhotoSources = [
-  "./assets/specimens/hyphae-40x.png",
-  "./assets/specimens/hyphae-100x.png",
-  "./assets/specimens/hyphae-400x.png",
-];
-const hyphaePhotos = hyphaePhotoSources.map((src) => {
+function getZoomLevels(specimen = state.specimen) {
+  return zoomStages.map((stage, index) => ({
+    ...stage,
+    label: specimen.zoomLabels?.[index] ?? stage.label,
+  }));
+}
+
+const specimenPhotoSources = {
+  hyphae: [
+    "./assets/specimens/generated/hyphae-1x-photo.png",
+    "./assets/specimens/generated/hyphae-5x-photo.png",
+    "./assets/specimens/generated/hyphae-40x-photo.png",
+  ],
+  mold: [
+    "./assets/specimens/generated/mold-1x-photo.png",
+    "./assets/specimens/generated/mold-5x-photo.png",
+    "./assets/specimens/generated/mold-40x-photo.png",
+  ],
+  spirogyra: [
+    "./assets/specimens/generated/spirogyra-1x-photo.png",
+    "./assets/specimens/generated/spirogyra-40x-photo.png",
+    "./assets/specimens/generated/spirogyra-100x-photo.png",
+  ],
+  paramecium: [
+    "./assets/specimens/generated/paramecium-40x-photo.png",
+    "./assets/specimens/generated/paramecium-100x-photo.png",
+    "./assets/specimens/generated/paramecium-400x-photo.png",
+  ],
+  campylobacter: [
+    "./assets/specimens/generated/campylobacter-photo.png",
+  ],
+  anthrax: [
+    "./assets/specimens/generated/anthrax-photo.png",
+  ],
+  staphylococcus: [
+    "./assets/specimens/generated/staphylococcus-photo.png",
+  ],
+};
+
+const specimenZoomFocus = {
+  hyphae: [
+    { x: 0.5, y: 0.48 },
+    { x: 0.5, y: 0.5 },
+  ],
+  mold: [
+    { x: 0.45, y: 0.54 },
+    { x: 0.55, y: 0.45 },
+  ],
+  spirogyra: [
+    { x: 0.5, y: 0.5 },
+    { x: 0.56, y: 0.46 },
+  ],
+  paramecium: [
+    { x: 0.48, y: 0.52 },
+    { x: 0.57, y: 0.45 },
+  ],
+};
+
+const specimenPhotos = Object.fromEntries(Object.entries(specimenPhotoSources).map(([id, sources]) => [
+  id,
+  sources.map((src) => {
   const image = new Image();
   image.src = src;
   return image;
-});
+  }),
+]));
 
 const OPTICAL_AXIS_X = -0.38;
 
 const state = {
-  specimen: specimens[0],
+  specimen: getInitialSpecimen(),
   focus: 35,
   light: 64,
   zoom: 1,
+  visualZoom: 1,
+  zoomTransition: null,
   time: 0,
   pointerDown: false,
   lastX: 0,
@@ -66,6 +179,8 @@ const state = {
 };
 
 const specimenGrid = document.querySelector("#specimenGrid");
+const specimenPickerTitle = document.querySelector("#specimenPickerTitle");
+const lessonChooser = document.querySelector("#lessonChooser");
 const lightControl = document.querySelector("#lightControl");
 const focusControl = document.querySelector("#focusControl");
 const zoomControl = document.querySelector("#zoomControl");
@@ -116,32 +231,68 @@ const activeControl = {
 
 function initSpecimenButtons() {
   specimenGrid.innerHTML = "";
-  specimens.forEach((specimen) => {
+  getVisibleSpecimens().forEach((specimen) => {
     const button = document.createElement("button");
     button.className = "specimen-button";
     button.type = "button";
     button.setAttribute("aria-pressed", specimen.id === state.specimen.id ? "true" : "false");
     button.dataset.specimen = specimen.id;
-    button.innerHTML = `<strong>${specimen.name}</strong>`;
+    button.innerHTML = getSpecimenButtonHtml(specimen);
     button.addEventListener("click", () => selectSpecimen(specimen.id));
     specimenGrid.append(button);
   });
 }
 
+function getSpecimenButtonHtml(specimen, done = false) {
+  const doneMark = done ? " ✓" : "";
+  const detail = specimen.fixedMagnification ? `<span>${specimen.shape} · ${specimen.fixedMagnification}</span>` : "";
+  return `<strong>${specimen.name}${doneMark}</strong>${detail}`;
+}
+
 function selectSpecimen(id) {
-  const specimen = specimens.find((item) => item.id === id);
+  const specimen = getVisibleSpecimens().find((item) => item.id === id);
   if (!specimen) return;
   state.specimen = specimen;
+  state.visualZoom = state.zoom;
+  state.zoomTransition = null;
   document.querySelectorAll(".specimen-button").forEach((button) => {
     button.setAttribute("aria-pressed", button.dataset.specimen === id ? "true" : "false");
   });
   updateUi();
 }
 
+function getInitialSpecimen() {
+  const firstLessonSpecimen = currentLesson?.specimens[0];
+  return specimens.find((specimen) => specimen.id === firstLessonSpecimen) ?? specimens[0];
+}
+
+function getVisibleSpecimens() {
+  if (!currentLesson) return specimens;
+  return specimens.filter((specimen) => currentLesson.specimens.includes(specimen.id));
+}
+
+function initLessonChooser() {
+  document.querySelectorAll(".lesson-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      window.location.href = `?lesson=${button.dataset.lesson}`;
+    });
+  });
+
+  if (currentLesson || isAllLesson) {
+    lessonChooser.classList.add("is-hidden");
+    lessonChooser.setAttribute("aria-hidden", "true");
+    specimenPickerTitle.textContent = currentLesson ? `${currentLesson.title} 표본 선택` : "전체 표본 선택";
+  }
+}
+
 function updateUi() {
+  const zoomLevels = getZoomLevels();
   lightValue.value = state.light;
   focusValue.value = state.focus;
-  zoomValue.value = zoomLevels[state.zoom].label;
+  const hasFixedMagnification = Boolean(state.specimen.fixedMagnification);
+  zoomControl.disabled = hasFixedMagnification;
+  zoomControl.setAttribute("aria-disabled", String(hasFixedMagnification));
+  zoomValue.value = hasFixedMagnification ? state.specimen.fixedMagnification : zoomLevels[state.zoom].label;
   overlaySpecimen.textContent = state.specimen.name;
 
   const focusDelta = Math.abs(state.focus - state.specimen.idealFocus);
@@ -163,10 +314,50 @@ function updateUi() {
     specimenPlate.material.color.set(state.specimen.color);
   }
   if (slideGlass) {
-    slideGlass.material.color.set(state.specimen.id === "spirogyra" || state.specimen.id === "paramecium" ? 0xc8eef1 : 0xf2f5ed);
+    slideGlass.material.color.set(state.specimen.id === "spirogyra" || state.specimen.id === "paramecium" || state.specimen.fixedMagnification ? 0xc8eef1 : 0xf2f5ed);
   }
 
   refreshButtons();
+}
+
+function startZoomTransition(nextZoom) {
+  if (state.specimen.fixedMagnification) return;
+  if (nextZoom === state.zoom) return;
+  state.zoomTransition = {
+    from: state.visualZoom,
+    to: nextZoom,
+    startedAt: performance.now(),
+    duration: ZOOM_TRANSITION_DURATION,
+    progress: 0,
+  };
+  state.zoom = nextZoom;
+  pulseControl("zoom");
+}
+
+function updateZoomTransition(now) {
+  if (!state.zoomTransition) {
+    state.visualZoom = state.zoom;
+    return;
+  }
+
+  const elapsed = now - state.zoomTransition.startedAt;
+  const rawProgress = Math.min(1, elapsed / state.zoomTransition.duration);
+  const easedProgress = easeInOutCubic(rawProgress);
+  state.zoomTransition.progress = easedProgress;
+  state.visualZoom = lerp(state.zoomTransition.from, state.zoomTransition.to, easedProgress);
+
+  if (rawProgress >= 1) {
+    state.visualZoom = state.zoomTransition.to;
+    state.zoomTransition = null;
+  }
+}
+
+function easeInOutCubic(value) {
+  return value < 0.5 ? 4 * value * value * value : 1 - ((-2 * value + 2) ** 3) / 2;
+}
+
+function lerp(from, to, progress) {
+  return from + (to - from) * progress;
 }
 
 lightControl.addEventListener("input", (event) => {
@@ -182,8 +373,7 @@ focusControl.addEventListener("input", (event) => {
 });
 
 zoomControl.addEventListener("input", (event) => {
-  state.zoom = Number(event.target.value);
-  pulseControl("zoom");
+  startZoomTransition(Number(event.target.value));
   updateUi();
 });
 
@@ -206,7 +396,7 @@ function refreshButtons() {
     const specimen = specimens.find((item) => item.id === button.dataset.specimen);
     const done = state.completed.has(button.dataset.specimen);
     button.classList.toggle("is-complete", done);
-    button.innerHTML = `<strong>${specimen.name}${done ? " ✓" : ""}</strong>`;
+    button.innerHTML = getSpecimenButtonHtml(specimen, done);
   });
 }
 
@@ -237,7 +427,7 @@ function createScene() {
   scene.add(key);
 
   lamp = new THREE.PointLight(0xdff8ff, 1.55, 9);
-  lamp.position.set(OPTICAL_AXIS_X, 0.55, 0.2);
+  lamp.position.set(-OPTICAL_AXIS_X, 0.55, 0.2);
   scene.add(lamp);
 
   const table = new THREE.Mesh(
@@ -252,6 +442,7 @@ function createScene() {
   scene.add(microscopeGroup);
 
   buildMicroscope(microscopeGroup);
+  microscopeGroup.scale.x = -1;
 
   const resize = () => {
     camera.aspect = host.clientWidth / host.clientHeight;
@@ -315,7 +506,9 @@ function createScene() {
 
   function animate() {
     requestAnimationFrame(animate);
+    const now = performance.now();
     state.time += 0.016;
+    updateZoomTransition(now);
     updateOrbitCamera(camera);
     camera.zoom += (1 - camera.zoom) * 0.12;
     camera.updateProjectionMatrix();
@@ -324,10 +517,10 @@ function createScene() {
     focusKnobLeft.rotation.z = state.focus * 0.045;
     focusKnobRight.rotation.z = -state.focus * 0.045;
     lightKnob.rotation.z = state.light * 0.05;
-    const zoom = zoomLevels[state.zoom];
+    const zoom = getZoomLevels()[state.zoom];
     revolvingRing.rotation.y += (zoom.ring - revolvingRing.rotation.y) * 0.14;
     objectiveHousing.rotation.y += (zoom.ring * 0.55 - objectiveHousing.rotation.y) * 0.14;
-    updateControlMarkers(performance.now());
+    updateControlMarkers(now);
     specimenPlate.position.x = OPTICAL_AXIS_X;
     camera.lookAt(cameraLookAt);
     updateEyepiecePrompt(camera, host);
@@ -536,7 +729,7 @@ function buildMicroscope(root) {
   specimenPlate = mesh(
     new THREE.CylinderGeometry(0.56, 0.56, 0.035, 72),
     new THREE.MeshPhysicalMaterial({ color: 0xcfe6ea, roughness: 0.04, transmission: 0.22, transparent: true, opacity: 0.5 }),
-    [OPTICAL_AXIS_X, 0.66, 0.08],
+    [OPTICAL_AXIS_X, 0.78, 0.08],
     [0, 0, 0],
     false,
   );
@@ -544,7 +737,7 @@ function buildMicroscope(root) {
   slideGlass = mesh(
     new THREE.BoxGeometry(1.18, 0.025, 0.54),
     new THREE.MeshPhysicalMaterial({ color: 0xf2f5ed, roughness: 0.08, transmission: 0.25, transparent: true, opacity: 0.55 }),
-    [OPTICAL_AXIS_X, 0.72, 0.08],
+    [OPTICAL_AXIS_X, 0.84, 0.08],
     [0, 0.08, 0],
     false,
   );
@@ -664,7 +857,7 @@ function buildMicroscope(root) {
   eyepieceLabel.rotation.y = -0.24;
   focusCarrier.add(eyepieceLabel);
 
-  const stageLabel = makeLabelSprite("조리대", 0.68, 0.19);
+  const stageLabel = makeLabelSprite("제물대", 0.68, 0.19);
   stageLabel.position.set(OPTICAL_AXIS_X - 0.82, 0.98, 0.36);
   stageLabel.rotation.y = 0.24;
   root.add(stageLabel);
@@ -748,13 +941,14 @@ function createSmallKnob(knobMaterial) {
 function makeLabelSprite(text, width, height) {
   const labelTexture = makeLabelTexture(text);
   const group = new THREE.Group();
+  group.scale.x = -1;
   const front = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true }),
+    new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true, side: THREE.DoubleSide }),
   );
   const back = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true }),
+    new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true, side: THREE.DoubleSide }),
   );
   front.position.z = 0.003;
   back.position.z = -0.003;
@@ -790,7 +984,10 @@ function drawScope(ctx, canvas) {
   const blur = Math.min(15, focusDelta * 0.5);
   const brightness = 0.35 + state.light / 95;
   const overexposed = Math.max(0, state.light - 84) / 28;
-  const zoomScale = zoomLevels[state.zoom].scale;
+  const visualZoom = state.visualZoom ?? state.zoom;
+  const nearestZoom = Math.round(visualZoom);
+  const zoomScale = getVisualZoomScale(visualZoom);
+  const hasSpecimenPhoto = Boolean(specimenPhotos[specimen.id]?.length);
 
   ctx.clearRect(0, 0, size, size);
   ctx.save();
@@ -810,15 +1007,18 @@ function drawScope(ctx, canvas) {
 
   ctx.save();
   ctx.translate(center, center);
-  if (specimen.id !== "hyphae") {
+  if (!hasSpecimenPhoto) {
     ctx.scale(zoomScale, zoomScale);
   }
   ctx.translate(-center, -center);
   ctx.filter = `blur(${blur}px)`;
-  if (specimen.id === "hyphae") drawHyphaePhoto(ctx, size, state.zoom) || drawHyphae(ctx, size, state.zoom);
-  if (specimen.id === "mold") drawMold(ctx, size, state.zoom);
-  if (specimen.id === "spirogyra") drawSpirogyra(ctx, size, state.zoom);
-  if (specimen.id === "paramecium") drawParamecium(ctx, size, state.zoom);
+  if (!drawInterpolatedSpecimenPhoto(ctx, size, specimen.id, visualZoom)) {
+    if (specimen.id === "hyphae") drawHyphae(ctx, size, nearestZoom);
+    if (specimen.id === "mold") drawMold(ctx, size, nearestZoom);
+    if (specimen.id === "spirogyra") drawSpirogyra(ctx, size, nearestZoom);
+    if (specimen.id === "paramecium") drawParamecium(ctx, size, nearestZoom);
+    if (specimen.fixedMagnification) drawBacteria(ctx, size, specimen.id);
+  }
   ctx.filter = "none";
   ctx.restore();
 
@@ -848,15 +1048,135 @@ function drawParticles(ctx, size) {
   }
 }
 
-function drawHyphaePhoto(ctx, size, zoomIndex) {
-  const image = hyphaePhotos[zoomIndex];
+function drawSpecimenPhoto(ctx, size, specimenId, zoomIndex) {
+  const image = specimenPhotos[specimenId]?.[zoomIndex];
   if (!image || !image.complete || image.naturalWidth === 0) return false;
 
+  drawSpecimenPhotoLayer(ctx, image, size, 1, 1, { x: 0.5, y: 0.5 });
+  return true;
+}
+
+function drawInterpolatedSpecimenPhoto(ctx, size, specimenId, visualZoom) {
+  const photos = specimenPhotos[specimenId];
+  if (!photos) return false;
+
+  if (photos.length === 1) {
+    const image = photos[0];
+    if (!isLoadedImage(image)) return false;
+    drawSpecimenPhotoLayer(ctx, image, size, 1, 1, { x: 0.5, y: 0.5 });
+    return true;
+  }
+
+  if (state.zoomTransition) {
+    return drawZoomTransitionPhoto(ctx, size, specimenId, state.zoomTransition);
+  }
+
+  const lowerZoom = Math.max(0, Math.min(photos.length - 1, Math.floor(visualZoom)));
+  const upperZoom = Math.max(0, Math.min(photos.length - 1, Math.ceil(visualZoom)));
+  const lowerImage = photos[lowerZoom];
+  const upperImage = photos[upperZoom];
+  if (!isLoadedImage(lowerImage) || !isLoadedImage(upperImage)) return false;
+
+  if (lowerZoom === upperZoom) {
+    drawSpecimenPhotoLayer(ctx, lowerImage, size, 1, 1, { x: 0.5, y: 0.5 });
+    return true;
+  }
+
+  const progress = visualZoom - lowerZoom;
+  const lowerScale = lerp(1, 1.42, progress);
+  const upperScale = lerp(0.72, 1, progress);
+  const focus = getZoomFocus(specimenId, lowerZoom);
+  drawSpecimenPhotoLayer(ctx, lowerImage, size, lowerScale, 1 - progress, focus);
+  drawSpecimenPhotoLayer(ctx, upperImage, size, upperScale, progress, focus);
+  return true;
+}
+
+function drawZoomTransitionPhoto(ctx, size, specimenId, transition) {
+  const photos = specimenPhotos[specimenId];
+  const fromIndex = Math.max(0, Math.min(photos.length - 1, Math.round(transition.from)));
+  const toIndex = Math.max(0, Math.min(photos.length - 1, transition.to));
+  const fromImage = photos[fromIndex];
+  const toImage = photos[toIndex];
+  if (!isLoadedImage(fromImage) || !isLoadedImage(toImage)) return false;
+  if (fromIndex === toIndex) {
+    drawSpecimenPhotoLayer(ctx, fromImage, size, 1, 1, { x: 0.5, y: 0.5 });
+    return true;
+  }
+
+  const forward = toIndex > fromIndex;
+  const pairIndex = Math.min(fromIndex, toIndex);
+  const focus = getZoomFocus(specimenId, pairIndex);
+  const progress = transition.progress ?? 0;
+
+  if (forward) {
+    const entryProgress = smoothstep(clamp(progress / 0.82, 0, 1));
+    const revealProgress = smoothstep(clamp((progress - 0.34) / 0.66, 0, 1));
+    const fadeProgress = smoothstep(clamp((progress - 0.46) / 0.54, 0, 1));
+    const fromScale = lerp(1, 3.25, entryProgress);
+    const toScale = lerp(1.18, 1, revealProgress);
+    drawSpecimenPhotoLayer(ctx, fromImage, size, fromScale, lerp(1, 0.14, fadeProgress), focus);
+    drawSpecimenPhotoLayer(ctx, toImage, size, toScale, revealProgress, { x: 0.5, y: 0.5 });
+  } else {
+    const revealProgress = smoothstep(clamp(progress / 0.58, 0, 1));
+    const exitProgress = smoothstep(clamp(progress / 0.9, 0, 1));
+    const fromScale = lerp(1, 0.76, exitProgress);
+    const toScale = lerp(2.8, 1, exitProgress);
+    drawSpecimenPhotoLayer(ctx, toImage, size, toScale, revealProgress, focus);
+    drawSpecimenPhotoLayer(ctx, fromImage, size, fromScale, 1 - revealProgress * 0.92, { x: 0.5, y: 0.5 });
+  }
+  drawZoomPulse(ctx, size, progress);
+  return true;
+}
+
+function drawSpecimenPhotoLayer(ctx, image, size, scale, alpha, focus) {
   const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
   const sourceX = (image.naturalWidth - sourceSize) / 2;
   const sourceY = (image.naturalHeight - sourceSize) / 2;
-  ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
-  return true;
+  const drawSize = size * scale;
+  const focusStrength = clamp(Math.abs(scale - 1) / 0.35, 0, 1);
+  const focusX = lerp(0.5, focus?.x ?? 0.5, focusStrength);
+  const focusY = lerp(0.5, focus?.y ?? 0.5, focusStrength);
+  const offsetX = size * 0.5 - drawSize * focusX;
+  const offsetY = size * 0.5 - drawSize * focusY;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, offsetX, offsetY, drawSize, drawSize);
+  ctx.restore();
+}
+
+function isLoadedImage(image) {
+  return Boolean(image && image.complete && image.naturalWidth > 0);
+}
+
+function getZoomFocus(specimenId, pairIndex) {
+  return specimenZoomFocus[specimenId]?.[pairIndex] ?? { x: 0.5, y: 0.5 };
+}
+
+function smoothstep(value) {
+  const clamped = clamp(value, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function drawZoomPulse(ctx, size, progress) {
+  const pulse = Math.sin(Math.PI * clamp(progress, 0, 1));
+  if (pulse <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = 0.12 * pulse;
+  ctx.fillStyle = "#fff8df";
+  ctx.fillRect(0, 0, size, size);
+  ctx.restore();
+}
+
+function getVisualZoomScale(visualZoom) {
+  const zoomLevels = getZoomLevels();
+  const lowerZoom = Math.max(0, Math.min(zoomLevels.length - 1, Math.floor(visualZoom)));
+  const upperZoom = Math.max(0, Math.min(zoomLevels.length - 1, Math.ceil(visualZoom)));
+  if (lowerZoom === upperZoom) return zoomLevels[lowerZoom].scale;
+  return lerp(zoomLevels[lowerZoom].scale, zoomLevels[upperZoom].scale, visualZoom - lowerZoom);
 }
 
 function drawHyphae(ctx, size, zoomIndex = 1) {
@@ -1006,6 +1326,112 @@ function drawParamecium(ctx, size, zoomIndex = 1) {
   ctx.restore();
 }
 
+function drawBacteria(ctx, size, specimenId) {
+  if (specimenId === "campylobacter") {
+    drawCampylobacter(ctx, size);
+    return;
+  }
+  if (specimenId === "anthrax") {
+    drawAnthrax(ctx, size);
+    return;
+  }
+  drawStaphylococcus(ctx, size);
+}
+
+function drawCampylobacter(ctx, size) {
+  ctx.save();
+  ctx.lineCap = "round";
+  for (let i = 0; i < 34; i += 1) {
+    const x = 34 + ((i * 83 + Math.sin(state.time + i) * 8) % (size - 68));
+    const y = 42 + ((i * 57 + Math.cos(state.time * 0.7 + i) * 7) % (size - 84));
+    const angle = ((i * 37) % 180) * (Math.PI / 180);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = "rgba(54, 118, 104, 0.72)";
+    ctx.lineWidth = 4.8;
+    ctx.beginPath();
+    ctx.moveTo(-24, 0);
+    ctx.quadraticCurveTo(-12, -16, 0, 0);
+    ctx.quadraticCurveTo(12, 16, 24, 0);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(229, 248, 239, 0.68)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawAnthrax(ctx, size) {
+  ctx.save();
+  for (let i = 0; i < 56; i += 1) {
+    const x = 42 + ((i * 71 + Math.sin(state.time * 0.8 + i) * 8) % (size - 84));
+    const y = 42 + ((i * 43 + Math.cos(state.time * 0.6 + i) * 6) % (size - 84));
+    const angle = ((i * 29) % 180) * (Math.PI / 180);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = "rgba(135, 132, 96, 0.75)";
+    ctx.strokeStyle = "rgba(74, 71, 52, 0.36)";
+    ctx.lineWidth = 1.6;
+    roundedRectPath(ctx, -8, -24, 16, 48, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(248, 244, 210, 0.4)";
+    ctx.beginPath();
+    ctx.moveTo(0, -18);
+    ctx.lineTo(0, 18);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawStaphylococcus(ctx, size) {
+  const clusters = [
+    { x: size * 0.42, y: size * 0.46, count: 30, radius: 66 },
+    { x: size * 0.62, y: size * 0.57, count: 22, radius: 52 },
+    { x: size * 0.54, y: size * 0.36, count: 18, radius: 45 },
+  ];
+  ctx.save();
+  clusters.forEach((cluster, clusterIndex) => {
+    for (let i = 0; i < cluster.count; i += 1) {
+      const angle = i * 2.399 + clusterIndex;
+      const distance = Math.sqrt(i / cluster.count) * cluster.radius;
+      const x = cluster.x + Math.cos(angle) * distance + Math.sin(state.time + i) * 1.8;
+      const y = cluster.y + Math.sin(angle) * distance + Math.cos(state.time * 0.8 + i) * 1.8;
+      ctx.fillStyle = "rgba(154, 104, 123, 0.76)";
+      ctx.strokeStyle = "rgba(82, 54, 67, 0.32)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(x, y, 10 + (i % 4) * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255, 232, 241, 0.38)";
+      ctx.beginPath();
+      ctx.arc(x - 3, y - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  ctx.restore();
+}
+
+function roundedRectPath(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+initLessonChooser();
 initSpecimenButtons();
 createScene();
 updateUi();
