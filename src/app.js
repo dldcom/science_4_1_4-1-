@@ -857,7 +857,7 @@ function buildMicroscope(root) {
   eyepieceLabel.rotation.y = -0.24;
   focusCarrier.add(eyepieceLabel);
 
-  const stageLabel = makeLabelSprite("제물대", 0.68, 0.19);
+  const stageLabel = makeLabelSprite("재물대", 0.68, 0.19);
   stageLabel.position.set(OPTICAL_AXIS_X - 0.82, 0.98, 0.36);
   stageLabel.rotation.y = 0.24;
   root.add(stageLabel);
